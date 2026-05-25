@@ -1,0 +1,42 @@
+dataset:
+  name: batadal
+  raw_file: data/raw/batadal/BATADAL_dataset04.csv
+  processed_root: data/processed/batadal
+  delimiter: ","
+  target_column: ATT_FLAG
+  time_column: DATETIME
+  split:
+    strategy: time_ordered
+    train_ratio: 0.6
+    validation_ratio: 0.2
+    test_ratio: 0.2
+
+preprocessing:
+  missing_value_strategy: none
+  scaler: standard
+  pca_enabled: true
+  pca_components: 1
+
+deep_learning:
+  enabled_models:
+    - lstm
+    - gru
+    - cnn1d
+  sequence_length: 32
+  batch_size: 32
+  epochs: 50
+  early_stopping_patience: 5
+
+automata:
+  window_size: 4
+  alphabet_size: 3
+  param_grid:
+    window_size: [3, 4, 5, 6]
+    alphabet_size: [3, 4, 5, 6]
+
+experiment:
+  seeds: [42, 123, 2026, 7, 999]
+  scenarios:
+    - original
+    - gaussian_noise
+    - unseen

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+outputs/logs/
+outputs/metrics/
+outputs/explainability/
+outputs/figures/
+data/processed/
