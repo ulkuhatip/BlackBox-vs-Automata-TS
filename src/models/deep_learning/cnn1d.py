@@ -1,13 +1,124 @@
 from __future__ import annotations
 
+import numpy as np
+import tensorflow as tf
+from tensorflow import keras
+
 
 class CNN1DModel:
-    """Placeholder 1D-CNN model wrapper."""
+    """
+    1D-CNN tabanlı zaman serisi anomali tespiti modeli.
 
-    def fit(self, x_train, y_train, x_val=None, y_val=None):
-        _ = (x_train, y_train, x_val, y_val)
+    Proje kuralları:
+    - Epoch üst sınırı: 50
+    - Batch size: 32
+    - Early stopping: validation loss, patience=5
+    - Random seed: dışarıdan verilir (42, 123, 2026, 7, 999)
+    """
+
+    def __init__(
+        self,
+        filters: int = 64,
+        kernel_size: int = 3,
+        dropout: float = 0.2,
+        learning_rate: float = 1e-3,
+        epochs: int = 50,
+        batch_size: int = 32,
+        early_stopping_patience: int = 5,
+        seed: int = 42,
+    ) -> None:
+        self.filters = filters
+        self.kernel_size = kernel_size
+        self.dropout = dropout
+        self.learning_rate = learning_rate
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.early_stopping_patience = early_stopping_patience
+        self.seed = seed
+        self.model_: keras.Model | None = None
+
+    def _set_seed(self) -> None:
+        tf.random.set_seed(self.seed)
+        np.random.seed(self.seed)
+
+    def _build(self, input_shape: tuple[int, int]) -> keras.Model:
+        self._set_seed()
+        model = keras.Sequential(
+            [
+                keras.layers.Input(shape=input_shape),
+                keras.layers.Conv1D(
+                    filters=self.filters,
+                    kernel_size=self.kernel_size,
+                    activation="relu",
+                    padding="same",
+                ),
+                keras.layers.Conv1D(
+                    filters=self.filters // 2,
+                    kernel_size=self.kernel_size,
+                    activation="relu",
+                    padding="same",
+                ),
+                keras.layers.GlobalAveragePooling1D(),
+                keras.layers.Dropout(self.dropout),
+                keras.layers.Dense(32, activation="relu"),
+                keras.layers.Dense(1, activation="sigmoid"),
+            ]
+        )
+        model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=self.learning_rate),
+            loss="binary_crossentropy",
+            metrics=["accuracy"],
+        )
+        return model
+
+    def fit(
+        self,
+        x_train: np.ndarray,
+        y_train: np.ndarray,
+        x_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
+    ) -> "CNN1DModel":
+        """
+        Modeli eğitir.
+
+        x_train shape: (n_samples, timesteps, features)
+        y_train shape: (n_samples,)
+        """
+        input_shape = (x_train.shape[1], x_train.shape[2])
+        self.model_ = self._build(input_shape)
+
+        callbacks = [
+            keras.callbacks.EarlyStopping(
+                monitor="val_loss",
+                patience=self.early_stopping_patience,
+                restore_best_weights=True,
+            )
+        ]
+
+        validation_data = (x_val, y_val) if x_val is not None else None
+
+        self.model_.fit(
+            x_train,
+            y_train,
+            epochs=self.epochs,
+            batch_size=self.batch_size,
+            validation_data=validation_data,
+            callbacks=callbacks,
+            verbose=0,
+        )
         return self
 
-    def predict(self, x_test):
-        _ = x_test
-        return []
+    def predict(self, x_test: np.ndarray) -> np.ndarray:
+        """
+        Tahmin üretir. 0.5 eşiği ile binary çıktı döner.
+        """
+        if self.model_ is None:
+            raise RuntimeError("Model henüz eğitilmedi. Önce fit() çağırın.")
+        probs = self.model_.predict(x_test, verbose=0).flatten()
+        return (probs >= 0.5).astype(int)
+
+    def predict_proba(self, x_test: np.ndarray) -> np.ndarray:
+        """Ham olasılık skorlarını döner."""
+        if self.model_ is None:
+            raise RuntimeError("Model henüz eğitilmedi. Önce fit() çağırın.")
+        return self.model_.predict(x_test, verbose=0).flatten()
