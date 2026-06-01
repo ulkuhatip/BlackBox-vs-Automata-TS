@@ -9,16 +9,18 @@ def add_gaussian_noise(
     std: float = 0.01,
     seed: int | None = None,
     numeric_only: bool = True,
+    exclude_columns: set[str] | None = None,
 ) -> pd.DataFrame:
     """
     Veri setine Gaussian (Normal) gürültü ekler.
 
     Parametreler
     ----------
-    dataset     : Girdi DataFrame
-    std         : Gürültünün standart sapması (varsayılan: 0.01)
-    seed        : Tekrarlanabilirlik için random seed
-    numeric_only: True ise yalnızca sayısal sütunlara gürültü ekler
+    dataset         : Girdi DataFrame
+    std             : Gürültünün standart sapması (varsayılan: 0.01)
+    seed            : Tekrarlanabilirlik için random seed
+    numeric_only    : True ise yalnızca sayısal sütunlara gürültü ekler
+    exclude_columns : Gürültü eklenmeyecek sütun kümeleri
 
     Döndürür
     --------
@@ -30,10 +32,28 @@ def add_gaussian_noise(
     rng = np.random.default_rng(seed)
     result = dataset.copy()
 
+    if exclude_columns is None:
+        exclude_columns = {
+            "datetime",
+            "anomaly",
+            "changepoint",
+            "source_group",
+            "source_file",
+            "ATT_FLAG",
+            "PC1",
+        }
+
     if numeric_only:
-        numeric_cols = result.select_dtypes(include=[np.number]).columns
+        numeric_cols = [
+            col
+            for col in result.select_dtypes(include=[np.number]).columns
+            if col not in exclude_columns
+        ]
     else:
-        numeric_cols = result.columns
+        numeric_cols = [col for col in result.columns if col not in exclude_columns]
+
+    if not numeric_cols:
+        return result
 
     noise = rng.normal(loc=0.0, scale=std, size=(len(result), len(numeric_cols)))
     result[numeric_cols] = result[numeric_cols].values + noise

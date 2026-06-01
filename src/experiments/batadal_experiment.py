@@ -1,5 +1,6 @@
 from __future__ import annotations
 from collections import defaultdict
+from pathlib import Path
 from statistics import mean
 from typing import Any
 
@@ -22,6 +23,9 @@ from src.data.unseen_generator import (
     create_unseen_scenario,
     extract_sax_vocabulary,
 )
+from src.utils.results import save_results_to_csv
+from src.utils.reporting import export_results_to_json, save_comparison_matrices
+from src.utils.benchmark import generate_benchmark_report
 
 
 class BATADALExperiment:
@@ -29,6 +33,7 @@ class BATADALExperiment:
         self.config = config
         self.dataset_config = config["dataset"]
         self.preprocessing_config = config["preprocessing"]
+        self.deep_learning_config = config["deep_learning"]
         self.automata_config = config["automata"]
         self.experiment_config = config["experiment"]
 
@@ -49,22 +54,91 @@ class BATADALExperiment:
         validation_df = self._build_validation_split(train_df)
         train_df = train_df.iloc[: len(train_df) - len(validation_df)]
 
+        results_root = Path("results/batadal")
+        results_root.mkdir(parents=True, exist_ok=True)
+
+        # ========== STAGE 1: Fixed Parameters (Baseline) ==========
+        print("\n" + "="*80)
+        print("STAGE 1: Fixed Parameters (window_size=4, alphabet_size=3)")
+        print("="*80)
+        fixed_window = 4
+        fixed_alphabet = 3
+        stage1_results = self._run_parameter_stage(
+            train_df, validation_df, test_df, fixed_window, fixed_alphabet, "Stage1_Fixed"
+        )
+        self._save_stage_results(stage1_results, results_root, "stage1_fixed")
+
+        # ========== STAGE 2: Parameter Variation (Grid Search) ==========
+        print("\n" + "="*80)
+        print("STAGE 2: Parameter Grid Search (16 combinations)")
+        print("="*80)
+        param_grid = self.automata_config.get("param_grid", {})
+        window_sizes = param_grid.get("window_size", [4])
+        alphabet_sizes = param_grid.get("alphabet_size", [3])
+
+        all_param_results = []
+        total_combinations = len(window_sizes) * len(alphabet_sizes)
+        current_combo = 0
+
+        for window_size in window_sizes:
+            for alphabet_size in alphabet_sizes:
+                current_combo += 1
+                print(f"\n[{current_combo}/{total_combinations}] Window={window_size}, Alphabet={alphabet_size}")
+                print("-" * 60)
+
+                combo_results = self._run_parameter_stage(
+                    train_df, validation_df, test_df, window_size, alphabet_size,
+                    f"Window{window_size}_Alpha{alphabet_size}"
+                )
+                all_param_results.append({
+                    "window_size": window_size,
+                    "alphabet_size": alphabet_size,
+                    "results": combo_results,
+                })
+
+        # Save individual combination results
+        for param_result in all_param_results:
+            combo_name = f"stage2_w{param_result['window_size']}_a{param_result['alphabet_size']}"
+            self._save_stage_results(param_result["results"], results_root, combo_name)
+
+        # Generate parameter analysis report
+        print(f"\n✅ Generating parameter analysis report...")
+        self._generate_parameter_analysis_report(all_param_results, results_root)
+
+        print(f"\n✅ BATADAL experiments completed! Results saved to {results_root}/")
+
+    def _run_parameter_stage(
+        self,
+        train_df: pd.DataFrame,
+        validation_df: pd.DataFrame,
+        test_df: pd.DataFrame,
+        window_size: int,
+        alphabet_size: int,
+        stage_name: str,
+    ) -> dict[str, dict[str, list[float]]]:
+        """Run a complete stage with given parameters on time-ordered BATADAL split."""
         pipeline = PreprocessingPipeline(
             scaler_type=self.preprocessing_config["scaler"],
             pca_components=self.preprocessing_config["pca_components"],
         )
         artifacts = pipeline.fit_transform(train_df, validation_df, test_df)
 
+        # Build and train DL models
         models = self._build_deep_learning_models()
         self._train_deep_learning_models(models, train_df, validation_df)
 
         results: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+
         for scenario in self.experiment_config["scenarios"]:
             scenario_test_df = self._prepare_scenario_test_df(test_df, train_df, scenario)
+
+            # Run automata with current parameters
             automata_metrics = self._run_automata_scenario(
                 artifacts,
                 scenario,
                 test_df=scenario_test_df,
+                window_size=window_size,
+                alphabet_size=alphabet_size,
             )
             deep_metrics = self._evaluate_deep_learning_models(models, scenario_test_df)
 
@@ -72,13 +146,91 @@ class BATADALExperiment:
                 for key, value in metrics.items():
                     results[scenario][f"{model_name}_{key}"].append(value)
 
-        print("\n=== BATADAL summary ===")
+        print(f"  ✅ Evaluation completed")
+        return results
+
+    def _save_stage_results(
+        self,
+        results: dict[str, dict[str, list[float]]],
+        results_root: Path,
+        stage_name: str,
+    ) -> None:
+        """Save results for a stage."""
+        print(f"\n--- {stage_name} Summary ---")
         for scenario, metric_lists in results.items():
             summary = {
                 metric: float(mean(values)) if values else 0.0
                 for metric, values in metric_lists.items()
             }
             print(f"Scenario: {scenario} → {summary}")
+
+        save_results_to_csv(results, results_root, stage_name)
+        export_results_to_json(results, results_root, stage_name)
+        save_comparison_matrices(results, results_root, stage_name)
+        generate_benchmark_report(results, results_root, stage_name)
+
+    def _generate_parameter_analysis_report(
+        self,
+        all_param_results: list[dict[str, Any]],
+        results_root: Path,
+    ) -> None:
+        """Generate a comprehensive parameter analysis report."""
+        import json
+        
+        analysis = []
+        for param_result in all_param_results:
+            window_size = param_result["window_size"]
+            alphabet_size = param_result["alphabet_size"]
+            results = param_result["results"]
+
+            # Calculate mean metrics across all scenarios
+            combo_analysis = {
+                "window_size": window_size,
+                "alphabet_size": alphabet_size,
+                "scenarios": {},
+            }
+
+            for scenario, metric_lists in results.items():
+                scenario_metrics = {}
+                for metric, values in metric_lists.items():
+                    if values:
+                        scenario_metrics[metric] = {
+                            "mean": float(mean(values)),
+                            "std": float(pd.Series(values).std()),
+                            "min": float(min(values)),
+                            "max": float(max(values)),
+                        }
+                combo_analysis["scenarios"][scenario] = scenario_metrics
+
+            analysis.append(combo_analysis)
+
+        # Save as JSON
+        analysis_file = results_root / "parameter_analysis.json"
+        with open(analysis_file, "w") as f:
+            json.dump(analysis, f, indent=2)
+
+        # Generate markdown report
+        report_file = results_root / "parameter_analysis_report.md"
+        with open(report_file, "w") as f:
+            f.write("# BATADAL Parameter Analysis Report\n\n")
+            f.write("## Parameter Grid Search Results\n\n")
+            f.write("16 combinations on time-ordered test set\n\n")
+
+            for combo in analysis:
+                w_size = combo["window_size"]
+                a_size = combo["alphabet_size"]
+                f.write(f"### Window Size={w_size}, Alphabet Size={a_size}\n\n")
+
+                for scenario, metrics in combo["scenarios"].items():
+                    f.write(f"#### Scenario: {scenario}\n")
+                    f.write("| Metric | Mean | Std | Min | Max |\n")
+                    f.write("|--------|------|-----|-----|-----|\n")
+                    for metric_name, values in metrics.items():
+                        f.write(f"| {metric_name} | {values['mean']:.4f} | {values['std']:.4f} | "
+                               f"{values['min']:.4f} | {values['max']:.4f} |\n")
+                    f.write("\n")
+
+        print(f"✅ Parameter analysis report saved to {report_file}")
 
     def _build_deep_learning_models(self) -> dict[str, Any]:
         parameters = {
@@ -162,7 +314,11 @@ class BATADALExperiment:
     ) -> pd.DataFrame:
         scenario_df = test_df.copy()
         if scenario == "gaussian_noise":
-            return add_gaussian_noise(scenario_df, seed=self.experiment_config["seeds"][0])
+            return add_gaussian_noise(
+                scenario_df,
+                seed=self.experiment_config["seeds"][0],
+                exclude_columns={self.dataset_config["target_column"]},
+            )
         elif scenario == "unseen":
             return create_numeric_unseen_scenario(
                 test_df=scenario_df,
@@ -185,7 +341,15 @@ class BATADALExperiment:
         artifacts: Any,
         scenario: str,
         test_df: pd.DataFrame | None = None,
+        window_size: int | None = None,
+        alphabet_size: int | None = None,
     ) -> dict[str, float]:
+        # Use provided parameters or fall back to config
+        if window_size is None:
+            window_size = self.automata_config["window_size"]
+        if alphabet_size is None:
+            alphabet_size = self.automata_config["alphabet_size"]
+
         if test_df is None:
             test_df = artifacts.test.copy()
             if scenario == "gaussian_noise":
@@ -194,8 +358,8 @@ class BATADALExperiment:
             test_df = test_df.copy()
 
         automaton = ProbabilisticAutomaton(
-            window_size=self.automata_config["window_size"],
-            alphabet_size=self.automata_config["alphabet_size"],
+            window_size=window_size,
+            alphabet_size=alphabet_size,
             anomaly_threshold=0.15,
         )
         automaton.fit(artifacts.train["PC1"].tolist())
@@ -203,24 +367,24 @@ class BATADALExperiment:
         if scenario == "unseen":
             training_patterns = windows_to_sax_patterns(
                 artifacts.train["PC1"].tolist(),
-                self.automata_config["window_size"],
-                self.automata_config["alphabet_size"],
+                window_size,
+                alphabet_size,
             )
             vocabulary = extract_sax_vocabulary(training_patterns)
             patterns, _ = create_unseen_scenario(
                 series=test_df["PC1"].tolist(),
                 sax_vocabulary=vocabulary,
-                alphabet_size=self.automata_config["alphabet_size"],
-                window_size=self.automata_config["window_size"],
+                alphabet_size=alphabet_size,
+                window_size=window_size,
                 seed=self.experiment_config["seeds"][0],
             )
         else:
             patterns = windows_to_sax_patterns(
                 test_df["PC1"].tolist(),
-                self.automata_config["window_size"],
-                self.automata_config["alphabet_size"],
+                window_size,
+                alphabet_size,
             )
 
-        y_true = test_df[self.dataset_config["target_column"]].iloc[self.automata_config["window_size"] - 1 :].to_numpy()
+        y_true = test_df[self.dataset_config["target_column"]].iloc[window_size - 1 :].to_numpy()
         y_pred = automaton.predict(patterns)
         return compute_classification_metrics(y_true, y_pred)
