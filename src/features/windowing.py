@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Sequence
 
+import numpy as np
+
 
 def sliding_windows(sequence: Sequence[float], window_size: int) -> list[list[float]]:
     """
@@ -48,3 +50,29 @@ def windows_to_sax_patterns(
         patterns.append(symbol)
 
     return patterns
+
+
+def build_windowed_dataset(
+    sequence: Sequence[float],
+    target_labels: Sequence[int],
+    sequence_length: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Derin öğrenme modelleri için kayan pencere tabanlı X, y dizilerini hazırlar.
+
+    X shape: (n_samples, sequence_length, 1)
+    y shape: (n_samples,)
+    """
+    values = list(sequence)
+    labels = list(target_labels)
+
+    if sequence_length <= 0:
+        raise ValueError("sequence_length must be positive")
+
+    n_samples = len(values) - sequence_length
+    if n_samples <= 0:
+        return np.zeros((0, sequence_length, 1), dtype=float), np.zeros((0,), dtype=int)
+
+    x_data = np.array([values[i : i + sequence_length] for i in range(n_samples)], dtype=float)
+    y_data = np.array(labels[sequence_length:], dtype=int)
+    return x_data.reshape(n_samples, sequence_length, 1), y_data

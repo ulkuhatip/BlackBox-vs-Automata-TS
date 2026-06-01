@@ -1,5 +1,6 @@
 from __future__ import annotations
 from collections import defaultdict
+from pathlib import Path
 from statistics import mean
 from typing import Any
 
@@ -10,9 +11,15 @@ from src.data.preprocess import PreprocessingPipeline
 from src.data.skab_loader import SKABLoader
 from src.data.splitters import split_skab_groups
 from src.evaluation.metrics import compute_classification_metrics
-from src.features.noise import add_gaussian_noise
-from src.features.windowing import windows_to_sax_patterns
+from src.features.noise import add_gaussian_noise, create_numeric_unseen_scenario
+from src.features.windowing import (
+    build_windowed_dataset,
+    windows_to_sax_patterns,
+)
 from src.models.automata.automaton import ProbabilisticAutomaton
+from src.models.deep_learning.cnn1d import CNN1DModel
+from src.models.deep_learning.gru import GRUModel
+from src.models.deep_learning.lstm import LSTMModel
 from src.data.unseen_generator import (
     create_unseen_scenario,
     extract_sax_vocabulary,
@@ -46,6 +53,9 @@ class SKABExperiment:
         )
 
         results: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+        results_root = Path("results/skab")
+        results_root.mkdir(parents=True, exist_ok=True)
+
         for fold_index, (train_df, test_df) in enumerate(folds, start=1):
             train_df, validation_df = self._train_validation_split(train_df)
             pipeline = PreprocessingPipeline(
@@ -54,10 +64,21 @@ class SKABExperiment:
             )
             artifacts = pipeline.fit_transform(train_df, validation_df, test_df)
 
+            models = self._build_deep_learning_models()
+            self._train_deep_learning_models(models, train_df, validation_df)
+
             for scenario in self.experiment_config["scenarios"]:
-                metrics = self._run_automata_scenario(artifacts, scenario)
-                for key, value in metrics.items():
-                    results[scenario][key].append(value)
+                scenario_test_df = self._prepare_scenario_test_df(test_df, train_df, scenario)
+                automata_metrics = self._run_automata_scenario(
+                    artifacts,
+                    scenario,
+                    test_df=scenario_test_df,
+                )
+                deep_metrics = self._evaluate_deep_learning_models(models, scenario_test_df)
+
+                for model_name, metrics in {"automata": automata_metrics, **deep_metrics}.items():
+                    for key, value in metrics.items():
+                        results[scenario][f"{model_name}_{key}"].append(value)
 
             print(f"✅ SKAB fold {fold_index} completed.")
 
@@ -68,6 +89,98 @@ class SKABExperiment:
                 for metric, values in metric_lists.items()
             }
             print(f"Scenario: {scenario} → {summary}")
+
+    def _build_deep_learning_models(self) -> dict[str, Any]:
+        parameters = {
+            "epochs": self.deep_learning_config["epochs"],
+            "batch_size": self.deep_learning_config["batch_size"],
+            "early_stopping_patience": self.deep_learning_config["early_stopping_patience"],
+            "seed": self.experiment_config["seeds"][0],
+        }
+
+        models: dict[str, Any] = {}
+        for model_name in self.deep_learning_config["enabled_models"]:
+            if model_name == "lstm":
+                models[model_name] = LSTMModel(**parameters)
+            elif model_name == "gru":
+                models[model_name] = GRUModel(**parameters)
+            elif model_name == "cnn1d":
+                models[model_name] = CNN1DModel(**parameters)
+            else:
+                raise ValueError(f"Unknown deep learning model: {model_name}")
+        return models
+
+    def _train_deep_learning_models(
+        self,
+        models: dict[str, Any],
+        train_df: pd.DataFrame,
+        validation_df: pd.DataFrame | None,
+    ) -> None:
+        x_train, y_train = self._prepare_dl_dataset(train_df)
+        x_val, y_val = (
+            self._prepare_dl_dataset(validation_df)
+            if validation_df is not None
+            else (None, None)
+        )
+
+        if x_train.shape[0] == 0:
+            print("⚠️ SKAB fold: Yeterli derin öğrenme eğitim verisi yok. Modeller atlanıyor.")
+            return
+
+        for model_name, model in models.items():
+            print(f"   🧠 Eğitiliyor: {model_name.upper()} ({len(x_train)} örnek)")
+            model.fit(x_train, y_train, x_val=x_val, y_val=y_val)
+
+    def _evaluate_deep_learning_models(
+        self,
+        models: dict[str, Any],
+        test_df: pd.DataFrame,
+    ) -> dict[str, dict[str, float]]:
+        x_test, y_test = self._prepare_dl_dataset(test_df)
+        metrics: dict[str, dict[str, float]] = {}
+
+        for model_name, model in models.items():
+            if x_test.shape[0] == 0:
+                metrics[model_name] = {
+                    "accuracy": 0.0,
+                    "precision": 0.0,
+                    "recall": 0.0,
+                    "f1": 0.0,
+                }
+                continue
+
+            y_pred = model.predict(x_test)
+            metrics[model_name] = compute_classification_metrics(y_test, y_pred)
+
+        return metrics
+
+    def _prepare_dl_dataset(
+        self,
+        df: pd.DataFrame,
+    ) -> tuple["np.ndarray", "np.ndarray"]:
+        return build_windowed_dataset(
+            df["PC1"].tolist(),
+            df[self.dataset_config["target_column"]].tolist(),
+            self.deep_learning_config["sequence_length"],
+        )
+
+    def _prepare_scenario_test_df(
+        self,
+        test_df: pd.DataFrame,
+        train_df: pd.DataFrame,
+        scenario: str,
+    ) -> pd.DataFrame:
+        scenario_df = test_df.copy()
+        if scenario == "gaussian_noise":
+            return add_gaussian_noise(scenario_df, seed=self.experiment_config["seeds"][0])
+        elif scenario == "unseen":
+            return create_numeric_unseen_scenario(
+                test_df=scenario_df,
+                train_df=train_df,
+                inject_ratio=0.1,
+                seed=self.experiment_config["seeds"][0],
+            )
+        return scenario_df
 
     def _train_validation_split(self, train_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame | None]:
         if len(train_df) < 10:
@@ -84,10 +197,14 @@ class SKABExperiment:
         self,
         artifacts: Any,
         scenario: str,
+        test_df: pd.DataFrame | None = None,
     ) -> dict[str, float]:
-        test_df = artifacts.test.copy()
-        if scenario == "gaussian_noise":
-            test_df = add_gaussian_noise(test_df, seed=self.experiment_config["seeds"][0])
+        if test_df is None:
+            test_df = artifacts.test.copy()
+            if scenario == "gaussian_noise":
+                test_df = add_gaussian_noise(test_df, seed=self.experiment_config["seeds"][0])
+        else:
+            test_df = test_df.copy()
 
         automaton = ProbabilisticAutomaton(
             window_size=self.automata_config["window_size"],
