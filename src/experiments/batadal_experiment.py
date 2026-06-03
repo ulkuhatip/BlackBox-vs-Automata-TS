@@ -126,22 +126,33 @@ class BATADALExperiment:
 
         # Build and train DL models
         models = self._build_deep_learning_models()
-        self._train_deep_learning_models(models, train_df, validation_df)
+        self._train_deep_learning_models(
+            models,
+            artifacts.train,
+            artifacts.validation,
+        )
 
         results: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
 
         for scenario in self.experiment_config["scenarios"]:
             scenario_test_df = self._prepare_scenario_test_df(test_df, train_df, scenario)
+            processed_scenario_test_df = self._transform_scenario_test_df(
+                pipeline,
+                scenario_test_df,
+            )
 
             # Run automata with current parameters
             automata_metrics = self._run_automata_scenario(
                 artifacts,
                 scenario,
-                test_df=scenario_test_df,
+                test_df=processed_scenario_test_df,
                 window_size=window_size,
                 alphabet_size=alphabet_size,
             )
-            deep_metrics = self._evaluate_deep_learning_models(models, scenario_test_df)
+            deep_metrics = self._evaluate_deep_learning_models(
+                models,
+                processed_scenario_test_df,
+            )
 
             for model_name, metrics in {"automata": automata_metrics, **deep_metrics}.items():
                 for key, value in metrics.items():
@@ -366,6 +377,14 @@ class BATADALExperiment:
                 seed=self.experiment_config["seeds"][0],
             )
         return scenario_df
+
+    def _transform_scenario_test_df(
+        self,
+        pipeline: PreprocessingPipeline,
+        scenario_test_df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        scaled_df = pipeline.scaler.transform(scenario_test_df)
+        return pipeline.pca.transform(scaled_df)
 
     def _build_validation_split(self, train_df: pd.DataFrame) -> pd.DataFrame:
         if len(train_df) < 10:
