@@ -1,0 +1,48 @@
+{
+  "metadata": {
+    "model": "test_model",
+    "scenario": "test_scenario",
+    "total_predictions": 3
+  },
+  "explanations": [
+    {
+      "decision": 1,
+      "confidence": 0.85,
+      "probabilities": {
+        "0": 0.15,
+        "1": 0.85
+      },
+      "input_shape": [
+        32,
+        1
+      ],
+      "interpretation": "Model predicts class 1 with 85.0% confidence. Class probabilities: 0=0.150, 1=0.850"
+    },
+    {
+      "decision": 1,
+      "confidence": 0.85,
+      "probabilities": {
+        "0": 0.15,
+        "1": 0.85
+      },
+      "input_shape": [
+        32,
+        1
+      ],
+      "interpretation": "Model predicts class 1 with 85.0% confidence. Class probabilities: 0=0.150, 1=0.850"
+    },
+    {
+      "decision": 1,
+      "confidence": 0.85,
+      "probabilities": {
+        "0": 0.15,
+        "1": 0.85
+      },
+      "input_shape": [
+        32,
+        1
+      ],
+      "interpretation": "Model predicts class 1 with 85.0% confidence. Class probabilities: 0=0.150, 1=0.850"
+    }
+  ]
+}

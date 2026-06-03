@@ -108,3 +108,18 @@ class LSTMModel:
         if self.model_ is None:
             raise RuntimeError("Model henüz eğitilmedi. Önce fit() çağırın.")
         return self.model_.predict(x_test, verbose=0).flatten()
+
+    def predict_proba_dict(self, x_test: np.ndarray) -> list[dict[int, float]]:
+        """Sınıf 0 ve 1 için olasılık sözlükleri döner.
+        
+        Her örnek için {0: p0, 1: p1} sözlüğü oluşturur.
+        Explainability formatter için gereklidir.
+        """
+        if self.model_ is None:
+            raise RuntimeError("Model henüz eğitilmedi. Önce fit() çağırın.")
+        probs_1 = self.model_.predict(x_test, verbose=0).flatten()
+        result = []
+        for p1 in probs_1:
+            p0 = 1.0 - p1
+            result.append({0: float(p0), 1: float(p1)})
+        return result

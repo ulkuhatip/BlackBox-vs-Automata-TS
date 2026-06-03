@@ -23,6 +23,7 @@ from src.data.unseen_generator import (
     create_unseen_scenario,
     extract_sax_vocabulary,
 )
+from src.explainability.formatter import format_deep_learning_explanation, save_explanations
 from src.utils.results import save_results_to_csv
 from src.utils.reporting import export_results_to_json, save_comparison_matrices
 from src.utils.benchmark import generate_benchmark_report
@@ -305,6 +306,44 @@ class BATADALExperiment:
             df[self.dataset_config["target_column"]].tolist(),
             self.deep_learning_config["sequence_length"],
         )
+
+    def _generate_deep_learning_explanations(
+        self,
+        models: dict[str, Any],
+        test_df: pd.DataFrame,
+        scenario: str,
+    ) -> None:
+        """Generate JSON explanations for deep learning model predictions."""
+        x_test, y_test = self._prepare_dl_dataset(test_df)
+        
+        if x_test.shape[0] == 0:
+            return
+        
+        for model_name, model in models.items():
+            predictions = model.predict(x_test)
+            proba_dicts = model.predict_proba_dict(x_test)
+            
+            explanations = []
+            for i in range(len(x_test)):
+                pred = int(predictions[i])
+                prob_dict = proba_dicts[i]
+                confidence = prob_dict[pred]
+                
+                expl = format_deep_learning_explanation(
+                    prediction=pred,
+                    probability=confidence,
+                    probabilities_all_classes=prob_dict,
+                    input_shape=x_test[i].shape
+                )
+                explanations.append(expl)
+            
+            output_path = Path("outputs/explainability/batadal")
+            save_explanations(
+                explanations,
+                output_path,
+                model_name,
+                scenario
+            )
 
     def _prepare_scenario_test_df(
         self,
