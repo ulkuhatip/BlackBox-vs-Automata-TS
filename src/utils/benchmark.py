@@ -6,6 +6,14 @@ from typing import Any
 import pandas as pd
 
 
+def _dataframe_to_report_table(df: pd.DataFrame) -> str:
+    """Render a dataframe for reports without requiring optional markdown deps."""
+    try:
+        return df.to_markdown(index=False)
+    except ImportError:
+        return df.to_string(index=False)
+
+
 def generate_benchmark_report(
     results: dict[str, dict[str, list[float]]],
     results_root: Path,
@@ -68,7 +76,7 @@ def generate_benchmark_report(
         
         if summary_rows:
             summary_df = pd.DataFrame(summary_rows)
-            report_lines.append(summary_df.to_markdown(index=False))
+            report_lines.append(_dataframe_to_report_table(summary_df))
             report_lines.append("")
     
     # Best performers

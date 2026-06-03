@@ -25,7 +25,10 @@ class BATADALLoader:
         self.delimiter = delimiter
 
     def load(self) -> pd.DataFrame:
-        return pd.read_csv(self.raw_file, sep=self.delimiter, skipinitialspace=True)
+        dataset = pd.read_csv(self.raw_file, sep=self.delimiter, skipinitialspace=True)
+        if "ATT_FLAG" in dataset.columns:
+            dataset["ATT_FLAG"] = (dataset["ATT_FLAG"] == 1).astype(int)
+        return dataset
 
     def save_copy(self, filename: str = "dataset04.csv") -> Path:
         dataset = self.load()

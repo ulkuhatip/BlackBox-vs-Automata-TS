@@ -146,6 +146,23 @@ def test_generate_unseen_patterns_count() -> None:
     assert len(unseen) == 8
 
 
+def test_generate_unseen_patterns_handles_exhausted_sax_space() -> None:
+    """Tam SAX uzayı dolu olsa bile fallback unseen pattern'lar üretilebilmeli."""
+    from itertools import product
+
+    vocabulary = {"".join(chars) for chars in product("abc", repeat=4)}
+    unseen = generate_unseen_patterns(
+        vocabulary=vocabulary,
+        alphabet_size=3,
+        window_size=4,
+        n_unseen=5,
+        seed=42,
+    )
+
+    assert len(unseen) == 5
+    assert all(pattern not in vocabulary for pattern in unseen)
+
+
 # ──────────────────────────────────────────────
 # Unseen Senaryo Entegrasyon Testi
 # ──────────────────────────────────────────────

@@ -49,3 +49,33 @@ def test_create_numeric_unseen_scenario_handles_empty_train() -> None:
     result = create_numeric_unseen_scenario(test_df=test_df, train_df=train_df, inject_ratio=0.5, seed=7)
 
     assert result.equals(test_df)
+
+
+def test_create_numeric_unseen_scenario_preserves_non_default_index() -> None:
+    train_df = pd.DataFrame(
+        {
+            "sensor_a": [0.0, 0.1, 0.2, 0.3, 0.4],
+            "sensor_b": [1.0, 1.1, 1.2, 1.3, 1.4],
+            "anomaly": [0, 0, 0, 0, 0],
+        },
+        index=[10, 11, 12, 13, 14],
+    )
+    test_df = pd.DataFrame(
+        {
+            "sensor_a": [0.05, 0.15, 0.25, 0.35, 0.45],
+            "sensor_b": [1.05, 1.15, 1.25, 1.35, 1.45],
+            "anomaly": [0, 1, 0, 1, 0],
+        },
+        index=[100, 101, 102, 103, 104],
+    )
+
+    result = create_numeric_unseen_scenario(
+        test_df=test_df,
+        train_df=train_df,
+        inject_ratio=0.4,
+        seed=42,
+    )
+
+    assert result.index.tolist() == test_df.index.tolist()
+    assert result["anomaly"].isna().sum() == 0
+    assert result.shape == test_df.shape

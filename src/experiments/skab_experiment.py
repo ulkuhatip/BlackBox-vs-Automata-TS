@@ -59,6 +59,7 @@ class SKABExperiment:
 
         results_root = Path("results/skab")
         results_root.mkdir(parents=True, exist_ok=True)
+        fold_contexts = self._prepare_fold_contexts(folds)
 
         # ========== STAGE 1: Fixed Parameters (Baseline) ==========
         print("\n" + "="*80)
@@ -67,9 +68,13 @@ class SKABExperiment:
         fixed_window = 4
         fixed_alphabet = 3
         stage1_results = self._run_parameter_stage(
-            folds, fixed_window, fixed_alphabet, "Stage1_Fixed"
+            fold_contexts, fixed_window, fixed_alphabet, "Stage1_Fixed"
         )
         self._save_stage_results(stage1_results, results_root, "stage1_fixed")
+
+        if self.experiment_config.get("stage1_only", False):
+            print("\n⏭️ Debug/stage1-only mode: skipping Stage 2 grid search.")
+            return
 
         # ========== STAGE 2: Parameter Variation (Grid Search) ==========
         print("\n" + "="*80)
@@ -90,7 +95,7 @@ class SKABExperiment:
                 print("-" * 60)
 
                 combo_results = self._run_parameter_stage(
-                    folds, window_size, alphabet_size, f"Window{window_size}_Alpha{alphabet_size}"
+                    fold_contexts, window_size, alphabet_size, f"Window{window_size}_Alpha{alphabet_size}"
                 )
                 all_param_results.append({
                     "window_size": window_size,
@@ -111,15 +116,47 @@ class SKABExperiment:
 
     def _run_parameter_stage(
         self,
-        folds: list[tuple[pd.DataFrame, pd.DataFrame]],
+        fold_contexts: list[dict[str, Any]],
         window_size: int,
         alphabet_size: int,
         stage_name: str,
     ) -> dict[str, dict[str, list[float]]]:
-        """Run a complete stage with given parameters across all folds."""
+        """Run a complete stage with given automata parameters across cached folds."""
         results: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
 
-        for fold_index, (train_df, test_df) in enumerate(folds, start=1):
+        for fold_index, fold_context in enumerate(fold_contexts, start=1):
+            artifacts = fold_context["artifacts"]
+            processed_tests = fold_context["processed_tests"]
+            deep_metrics_by_scenario = fold_context["deep_metrics"]
+
+            for scenario in self.experiment_config["scenarios"]:
+                automata_metrics = self._run_automata_scenario(
+                    artifacts,
+                    scenario,
+                    test_df=processed_tests[scenario],
+                    window_size=window_size,
+                    alphabet_size=alphabet_size,
+                )
+                deep_metrics = deep_metrics_by_scenario[scenario]
+
+                for model_name, metrics in {"automata": automata_metrics, **deep_metrics}.items():
+                    for key, value in metrics.items():
+                        results[scenario][f"{model_name}_{key}"].append(value)
+
+            print(f"  ✅ Fold {fold_index}/{len(fold_contexts)} completed")
+
+        return results
+
+    def _prepare_fold_contexts(
+        self,
+        folds: list[tuple[pd.DataFrame, pd.DataFrame]],
+    ) -> list[dict[str, Any]]:
+        """Fit preprocessing and deep learning once per fold, then cache scenario outputs."""
+        max_folds = self.experiment_config.get("max_folds")
+        selected_folds = folds[:max_folds] if max_folds is not None else folds
+        fold_contexts: list[dict[str, Any]] = []
+
+        for fold_index, (train_df, test_df) in enumerate(selected_folds, start=1):
             train_df, validation_df = self._train_validation_split(train_df)
             pipeline = PreprocessingPipeline(
                 scaler_type=self.preprocessing_config["scaler"],
@@ -127,7 +164,6 @@ class SKABExperiment:
             )
             artifacts = pipeline.fit_transform(train_df, validation_df, test_df)
 
-            # Build and train DL models (once per fold)
             models = self._build_deep_learning_models()
             self._train_deep_learning_models(
                 models,
@@ -135,33 +171,31 @@ class SKABExperiment:
                 artifacts.validation,
             )
 
+            processed_tests: dict[str, pd.DataFrame] = {}
+            deep_metrics_by_scenario: dict[str, dict[str, dict[str, float]]] = {}
+
             for scenario in self.experiment_config["scenarios"]:
                 scenario_test_df = self._prepare_scenario_test_df(test_df, train_df, scenario)
                 processed_scenario_test_df = self._transform_scenario_test_df(
                     pipeline,
                     scenario_test_df,
                 )
-
-                # Run automata with current parameters
-                automata_metrics = self._run_automata_scenario(
-                    artifacts,
-                    scenario,
-                    test_df=processed_scenario_test_df,
-                    window_size=window_size,
-                    alphabet_size=alphabet_size,
-                )
-                deep_metrics = self._evaluate_deep_learning_models(
+                processed_tests[scenario] = processed_scenario_test_df
+                deep_metrics_by_scenario[scenario] = self._evaluate_deep_learning_models(
                     models,
                     processed_scenario_test_df,
                 )
 
-                for model_name, metrics in {"automata": automata_metrics, **deep_metrics}.items():
-                    for key, value in metrics.items():
-                        results[scenario][f"{model_name}_{key}"].append(value)
+            fold_contexts.append(
+                {
+                    "artifacts": artifacts,
+                    "processed_tests": processed_tests,
+                    "deep_metrics": deep_metrics_by_scenario,
+                }
+            )
+            print(f"  ✅ Fold {fold_index}/{len(selected_folds)} preprocessing and DL cache ready")
 
-            print(f"  ✅ Fold {fold_index}/5 completed")
-
-        return results
+        return fold_contexts
 
     def _save_stage_results(
         self,

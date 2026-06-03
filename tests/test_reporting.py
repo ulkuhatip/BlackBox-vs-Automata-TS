@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -68,3 +69,21 @@ def test_save_comparison_matrices_creates_csv_files(tmp_path: Path) -> None:
 
     csv_files = list(tmp_path.glob("test_*_comparison_matrix.csv"))
     assert len(csv_files) > 0
+
+
+def test_generate_benchmark_report_falls_back_without_tabulate(tmp_path: Path) -> None:
+    results = {
+        "original": {
+            "automata_accuracy": [0.85, 0.90],
+            "lstm_accuracy": [0.88, 0.92],
+        }
+    }
+
+    with patch.object(pd.DataFrame, "to_markdown", side_effect=ImportError("missing tabulate")):
+        generate_benchmark_report(results, tmp_path, "test_benchmark")
+
+    report_path = tmp_path / "test_benchmark_benchmark_report.md"
+    assert report_path.exists()
+    content = report_path.read_text(encoding="utf-8")
+    assert "Benchmark Report: TEST_BENCHMARK" in content
+    assert "Scenario" in content

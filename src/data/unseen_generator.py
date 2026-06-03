@@ -1,22 +1,13 @@
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
+from itertools import product
 from typing import Sequence
+
+import numpy as np
 
 
 def extract_sax_vocabulary(patterns: Sequence[str]) -> set[str]:
-    """
-    Eğitim verisi pattern listesinden SAX sözlüğü oluşturur.
-    
-    Parametreler
-    ----------
-    patterns : Eğitim verisindeki SAX pattern listesi
-    
-    Döndürür
-    --------
-    Benzersiz pattern'lardan oluşan sözlük (set)
-    """
+    """Build a unique SAX vocabulary from training patterns."""
     return set(patterns)
 
 
@@ -27,42 +18,62 @@ def generate_unseen_patterns(
     n_unseen: int = 10,
     seed: int | None = None,
 ) -> list[str]:
-    """
-    Sözlükte BULUNMAYAN rastgele SAX pattern'ları üretir.
-    
-    Proje gereksinimi: Test sırasında sözlükte bulunmayan pattern'lar
-    unseen olarak kabul edilir.
-    
-    Parametreler
-    ----------
-    vocabulary    : Eğitim verisinden çıkarılan SAX sözlüğü
-    alphabet_size : SAX alfabe boyutu (ör. 3 → a,b,c)
-    window_size   : Pattern uzunluğu
-    n_unseen      : Üretilecek unseen pattern sayısı
-    seed          : Tekrarlanabilirlik için random seed
-    
-    Döndürür
-    --------
-    Sözlükte bulunmayan pattern listesi
-    """
+    """Generate symbolic patterns that do not exist in the training vocabulary."""
+    if alphabet_size <= 0:
+        raise ValueError("alphabet_size must be positive")
+    if window_size <= 0:
+        raise ValueError("window_size must be positive")
+    if n_unseen <= 0:
+        return []
+
     alphabet = "abcdefghijklmnopqrstuvwxyz"[:alphabet_size]
     rng = np.random.default_rng(seed)
+    unseen: list[str] = []
+    seen_unseen: set[str] = set()
 
-    unseen = []
-    max_attempts = n_unseen * 1000
-
-    for _ in range(max_attempts):
-        if len(unseen) >= n_unseen:
-            break
-        candidate = "".join(rng.choice(list(alphabet), size=window_size))
-        if candidate not in vocabulary:
-            unseen.append(candidate)
-
-    if len(unseen) < n_unseen:
-        raise RuntimeError(
-            f"Yalnızca {len(unseen)} unseen pattern üretilebildi "
-            f"(istenen: {n_unseen}). alphabet_size veya window_size artırın."
+    base_candidates = [
+        candidate
+        for candidate in (
+            "".join(chars) for chars in product(alphabet, repeat=window_size)
         )
+        if candidate not in vocabulary
+    ]
+
+    if base_candidates:
+        take = min(n_unseen, len(base_candidates))
+        if take == len(base_candidates):
+            selected = list(base_candidates)
+        else:
+            selected_indices = rng.choice(len(base_candidates), size=take, replace=False)
+            selected = [base_candidates[int(idx)] for idx in selected_indices]
+
+        unseen.extend(selected)
+        seen_unseen.update(selected)
+
+    if len(unseen) >= n_unseen:
+        return unseen[:n_unseen]
+
+    # If the normal SAX space is exhausted, synthesize extra symbolic patterns
+    # with out-of-alphabet symbols so the unseen-handling path can still run.
+    fallback_symbols = alphabet[alphabet_size:] + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    symbol_count = len(fallback_symbols)
+    if symbol_count == 0:
+        raise RuntimeError("No fallback symbols available for unseen pattern generation")
+
+    start_index = int(rng.integers(0, symbol_count ** min(window_size, 6)))
+    candidate_index = start_index
+
+    while len(unseen) < n_unseen:
+        value = candidate_index
+        chars: list[str] = []
+        for _ in range(window_size):
+            chars.append(fallback_symbols[value % symbol_count])
+            value //= symbol_count
+        candidate = "".join(chars)
+        if candidate not in vocabulary and candidate not in seen_unseen:
+            unseen.append(candidate)
+            seen_unseen.add(candidate)
+        candidate_index += 1
 
     return unseen
 
@@ -75,32 +86,12 @@ def create_unseen_scenario(
     inject_ratio: float = 0.1,
     seed: int | None = None,
 ) -> tuple[list[str], list[bool]]:
-    """
-    Orijinal SAX pattern dizisine unseen pattern'lar enjekte eder.
-    
-    Test senaryosu için: bazı konumlara sözlük dışı pattern ekler.
-    
-    Parametreler
-    ----------
-    series        : Orijinal PC1 zaman serisi
-    sax_vocabulary: Eğitim sözlüğü
-    alphabet_size : SAX alfabe boyutu
-    window_size   : Pencere boyutu
-    inject_ratio  : Kaç oranında pattern'ın unseen olacağı (0.0-1.0)
-    seed          : Random seed
-    
-    Döndürür
-    --------
-    (pattern_listesi, is_unseen_listesi) tuple'ı
-    """
+    """Inject unseen symbolic patterns into a SAX pattern sequence."""
     from src.features.windowing import windows_to_sax_patterns
 
     rng = np.random.default_rng(seed)
-
-    # Orijinal pattern'ları üret
     patterns = windows_to_sax_patterns(series, window_size, alphabet_size)
 
-    # Unseen pattern havuzu oluştur
     n_inject = max(1, int(len(patterns) * inject_ratio))
     unseen_pool = generate_unseen_patterns(
         vocabulary=sax_vocabulary,
@@ -110,7 +101,6 @@ def create_unseen_scenario(
         seed=seed,
     )
 
-    # Hangi indekslere unseen enjekte edileceğini seç
     inject_indices = rng.choice(len(patterns), size=n_inject, replace=False)
     is_unseen = [False] * len(patterns)
 

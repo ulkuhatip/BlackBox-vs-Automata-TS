@@ -15,15 +15,21 @@ class DatasetScaler:
             
         self.exclude_columns = ['datetime', 'anomaly', 'changepoint', 'source_group', 'source_file', 'ATT_FLAG']
 
+    def _sensor_columns(self, df: pd.DataFrame) -> list[str]:
+        return [
+            col for col in df.columns
+            if col not in self.exclude_columns and pd.api.types.is_numeric_dtype(df[col])
+        ]
+
     def fit(self, df: pd.DataFrame) -> DatasetScaler:
         """Learns the mean and variance ONLY from the training fold."""
-        sensor_cols = [col for col in df.columns if col not in self.exclude_columns]
+        sensor_cols = self._sensor_columns(df)
         self.scaler.fit(df[sensor_cols])
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """Applies the learned scaling parameters to any given subset."""
         df_copy = df.copy()
-        sensor_cols = [col for col in df_copy.columns if col not in self.exclude_columns]
+        sensor_cols = self._sensor_columns(df_copy)
         df_copy[sensor_cols] = self.scaler.transform(df_copy[sensor_cols])
         return df_copy

@@ -134,8 +134,9 @@ def create_numeric_unseen_scenario(
             scale=train_std,
             size=len(inject_indices)
         )
-        
-        for i, idx in enumerate(inject_indices):
-            result.loc[idx, col] = unseen_values[i]
+
+        row_index = result.index.to_numpy()
+        target_labels = row_index[inject_indices]
+        result.loc[target_labels, col] = unseen_values
     
     return result

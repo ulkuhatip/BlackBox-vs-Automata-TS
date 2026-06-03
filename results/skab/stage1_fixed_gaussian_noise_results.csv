@@ -1,0 +1,17 @@
+scenario,model,metric,mean,min,max,folds
+gaussian_noise,automata,accuracy,0.6508189599790704,0.6392148014440433,0.6582869855394883,5
+gaussian_noise,automata,precision,0.29757575757575755,0.0,0.5,5
+gaussian_noise,automata,recall,0.0020509788016312516,0.0,0.006464124111182934,5
+gaussian_noise,automata,f1,0.004052617841899896,0.0,0.012746972594008922,5
+gaussian_noise,lstm,accuracy,0.6492172858548046,0.6368385191914604,0.6560680698611733,5
+gaussian_noise,lstm,precision,0.0,0.0,0.0,5
+gaussian_noise,lstm,recall,0.0,0.0,0.0,5
+gaussian_noise,lstm,f1,0.0,0.0,0.0,5
+gaussian_noise,gru,accuracy,0.635311687526271,0.5929715302491103,0.6557670772676372,5
+gaussian_noise,gru,precision,0.14202461354376889,0.0,0.3651753325272068,5
+gaussian_noise,gru,recall,0.050476188161169874,0.0,0.1879278158058494,5
+gaussian_noise,gru,f1,0.07135267383668284,0.0,0.24815119145439607,5
+gaussian_noise,cnn1d,accuracy,0.6492172858548046,0.6368385191914604,0.6560680698611733,5
+gaussian_noise,cnn1d,precision,0.0,0.0,0.0,5
+gaussian_noise,cnn1d,recall,0.0,0.0,0.0,5
+gaussian_noise,cnn1d,f1,0.0,0.0,0.0,5
