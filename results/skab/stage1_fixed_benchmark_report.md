@@ -61,30 +61,30 @@ gaussian_noise 0.0000 0.0000 0.0000 0.0000
 ### GRU_ACCURACY
 
       Scenario   Mean    Min    Max  Range
-gaussian_noise 0.6353 0.5930 0.6558 0.0628
-      original 0.6497 0.6368 0.6561 0.0192
-        unseen 0.6482 0.6368 0.6561 0.0192
+gaussian_noise 0.6469 0.6319 0.6558 0.0239
+      original 0.6492 0.6368 0.6561 0.0192
+        unseen 0.6492 0.6368 0.6561 0.0192
 
 ### GRU_F1
 
       Scenario   Mean    Min    Max  Range
-gaussian_noise 0.0714 0.0000 0.2482 0.2482
-      original 0.0113 0.0000 0.0567 0.0567
-        unseen 0.0082 0.0000 0.0412 0.0412
+gaussian_noise 0.0130 0.0000 0.0613 0.0613
+      original 0.0000 0.0000 0.0000 0.0000
+        unseen 0.0000 0.0000 0.0000 0.0000
 
 ### GRU_PRECISION
 
       Scenario   Mean    Min    Max  Range
-gaussian_noise 0.1420 0.0000 0.3652 0.3652
-      original 0.1116 0.0000 0.5581 0.5581
-        unseen 0.0761 0.0000 0.3804 0.3804
+gaussian_noise 0.1292 0.0000 0.3462 0.3462
+      original 0.0000 0.0000 0.0000 0.0000
+        unseen 0.0000 0.0000 0.0000 0.0000
 
 ### GRU_RECALL
 
       Scenario   Mean    Min    Max  Range
-gaussian_noise 0.0505 0.0000 0.1879 0.1879
-      original 0.0060 0.0000 0.0299 0.0299
-        unseen 0.0044 0.0000 0.0218 0.0218
+gaussian_noise 0.0071 0.0000 0.0336 0.0336
+      original 0.0000 0.0000 0.0000 0.0000
+        unseen 0.0000 0.0000 0.0000 0.0000
 
 ### LSTM_ACCURACY
 
@@ -119,13 +119,13 @@ gaussian_noise 0.0000 0.0000 0.0000 0.0000
 ### GAUSSIAN_NOISE
 
 - **accuracy**: automata (0.6508)
-- **f1**: gru (0.0714)
+- **f1**: gru (0.0130)
 - **precision**: automata (0.2976)
-- **recall**: gru (0.0505)
+- **recall**: gru (0.0071)
 
 ### ORIGINAL
 
-- **accuracy**: gru (0.6497)
+- **accuracy**: lstm (0.6492)
 - **f1**: automata (0.0364)
 - **precision**: automata (0.2431)
 - **recall**: automata (0.0204)

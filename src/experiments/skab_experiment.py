@@ -254,15 +254,15 @@ class SKABExperiment:
 
         # Save as JSON
         analysis_file = results_root / "parameter_analysis.json"
-        with open(analysis_file, "w") as f:
+        with open(analysis_file, "w", encoding="utf-8") as f:
             json.dump(analysis, f, indent=2)
 
         # Generate markdown report
         report_file = results_root / "parameter_analysis_report.md"
-        with open(report_file, "w") as f:
+        with open(report_file, "w", encoding="utf-8") as f:
             f.write("# SKAB Parameter Analysis Report\n\n")
             f.write("## Parameter Grid Search Results\n\n")
-            f.write("16 combinations × 5 folds = 80 model evaluations\n\n")
+            f.write("16 combinations x 5 folds = 80 model evaluations\n\n")
 
             for combo in analysis:
                 w_size = combo["window_size"]

@@ -1,0 +1,17 @@
+scenario,model,metric,mean,min,max,folds
+original,automata,accuracy,0.6479267851257373,0.6365444100751215,0.6580645161290323,5
+original,automata,precision,0.18746572659616137,0.0,0.36486486486486486,5
+original,automata,recall,0.009652227958640734,0.0,0.023646546359676415,5
+original,automata,f1,0.018275917861341678,0.0,0.044160371876815804,5
+original,lstm,accuracy,0.6492172858548046,0.6368385191914604,0.6560680698611733,5
+original,lstm,precision,0.0,0.0,0.0,5
+original,lstm,recall,0.0,0.0,0.0,5
+original,lstm,f1,0.0,0.0,0.0,5
+original,gru,accuracy,0.6492172858548046,0.6368385191914604,0.6560680698611733,5
+original,gru,precision,0.0,0.0,0.0,5
+original,gru,recall,0.0,0.0,0.0,5
+original,gru,f1,0.0,0.0,0.0,5
+original,cnn1d,accuracy,0.6492172858548046,0.6368385191914604,0.6560680698611733,5
+original,cnn1d,precision,0.0,0.0,0.0,5
+original,cnn1d,recall,0.0,0.0,0.0,5
+original,cnn1d,f1,0.0,0.0,0.0,5
