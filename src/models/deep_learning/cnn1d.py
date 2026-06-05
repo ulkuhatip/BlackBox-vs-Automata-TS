@@ -78,12 +78,6 @@ class CNN1DModel:
         x_val: np.ndarray | None = None,
         y_val: np.ndarray | None = None,
     ) -> "CNN1DModel":
-        """
-        Modeli eğitir.
-
-        x_train shape: (n_samples, timesteps, features)
-        y_train shape: (n_samples,)
-        """
         input_shape = (x_train.shape[1], x_train.shape[2])
         self.model_ = self._build(input_shape)
 
@@ -97,6 +91,11 @@ class CNN1DModel:
 
         validation_data = (x_val, y_val) if x_val is not None else None
 
+        from sklearn.utils.class_weight import compute_class_weight
+        classes = np.unique(y_train)
+        weights = compute_class_weight('balanced', classes=classes, y=y_train)
+        class_weight_dict = dict(zip(classes.tolist(), weights.tolist()))
+
         self.model_.fit(
             x_train,
             y_train,
@@ -104,31 +103,23 @@ class CNN1DModel:
             batch_size=self.batch_size,
             validation_data=validation_data,
             callbacks=callbacks,
+            class_weight=class_weight_dict,
             verbose=0,
         )
         return self
 
     def predict(self, x_test: np.ndarray) -> np.ndarray:
-        """
-        Tahmin üretir. 0.5 eşiği ile binary çıktı döner.
-        """
         if self.model_ is None:
             raise RuntimeError("Model henüz eğitilmedi. Önce fit() çağırın.")
         probs = self.model_.predict(x_test, verbose=0).flatten()
         return (probs >= 0.5).astype(int)
 
     def predict_proba(self, x_test: np.ndarray) -> np.ndarray:
-        """Ham olasılık skorlarını döner."""
         if self.model_ is None:
             raise RuntimeError("Model henüz eğitilmedi. Önce fit() çağırın.")
         return self.model_.predict(x_test, verbose=0).flatten()
 
     def predict_proba_dict(self, x_test: np.ndarray) -> list[dict[int, float]]:
-        """Sınıf 0 ve 1 için olasılık sözlükleri döner.
-        
-        Her örnek için {0: p0, 1: p1} sözlüğü oluşturur.
-        Explainability formatter için gereklidir.
-        """
         if self.model_ is None:
             raise RuntimeError("Model henüz eğitilmedi. Önce fit() çağırın.")
         probs_1 = self.model_.predict(x_test, verbose=0).flatten()
