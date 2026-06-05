@@ -70,7 +70,7 @@ class ExperimentRunner:
             print("🔧 Debug mode is ON (runtime overrides only, config files unchanged)")
 
         print("🚀 Running SKAB experiment")
-        # SKABExperiment(skab_config).run()
+        SKABExperiment(skab_config).run()
 
 
         print("\n🚀 Running BATADAL experiment")
