@@ -1,741 +1,219 @@
 # BlackBox-vs-Automata-TS
 
-This project compares two different approaches for time-series anomaly detection:
+## XI. Reporting and Expectations
 
-- black-box deep learning models
-- interpretable probabilistic automata models
+The goal of this report is not to choose a single "best" model, but to analyze in a systematic way how black-box deep learning models and interpretable probabilistic automata behave under different data conditions.
 
-The project uses two datasets:
+Datasets used:
 
 - `SKAB`
 - `BATADAL`
 
-The goal is not only to find the best score, but to analyze how different model families behave under different data conditions:
+Compared model families:
 
-- original data
-- noisy data
-- unseen pattern data
+- `Automata`
+- `LSTM`
+- `GRU`
+- `CNN1D`
 
-This README is written as an onboarding guide for a teammate who is new to the project.
+Evaluated scenarios:
 
-## Getting Started
+- `original`
+- `gaussian_noise`
+- `unseen`
 
-These steps are intended for Windows users working in PowerShell.
+This README is based on the following final report artifacts:
 
-### 1. Clone the repository
+- [SKAB benchmark](results/skab/stage2_w6_a5_benchmark_report.md)
+- [BATADAL benchmark](results/batadal/stage2_w6_a5_benchmark_report.md)
+- [SKAB parameter analysis](results/skab/parameter_analysis_report.md)
+- [BATADAL parameter analysis](results/batadal/parameter_analysis_report.md)
 
-```powershell
-git clone <repo-url>
-cd BlackBox-vs-Automata-TS
-```
+## Experimental Setup
 
-### 2. Create a virtual environment
+In the final comparison report, the automata configuration was selected as `window_size=6` and `alphabet_size=5`.
 
-```powershell
-python -m venv .venv
-```
+- `SKAB`: results are reported as averages across 5 folds.
+- `BATADAL`: results are reported on a single time-ordered test split.
 
-If `python` does not work on your machine, try:
+This difference matters: `SKAB` results include variance across folds, while `BATADAL` results mainly reflect behavior on one fixed split.
 
-```powershell
-py -3 -m venv .venv
-```
-
-### 3. Activate the virtual environment
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-If PowerShell blocks script execution, run this once in the current terminal:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-```
-
-### 4. Install dependencies
-
-```powershell
-pip install -r requirements.txt
-```
-
-### 5. Verify the dataset layout
-
-Make sure the raw data is placed exactly like this:
-
-```text
-data/raw/skab/valve1/*.csv
-data/raw/skab/valve2/*.csv
-data/raw/batadal/BATADAL_dataset04.csv
-```
-
-### 6. Review configuration files
-
-Check:
-
-- `configs/skab.yaml`
-- `configs/batadal.yaml`
-
-These files define:
-
-- dataset paths
-- preprocessing options
-- model settings
-- automata parameters
-- experiment seeds
-
-### 7. Run the entry point
-
-Current scaffold command:
-
-```powershell
-python -m src.main
-```
-
-If needed:
-
-```powershell
-py -3 -m src.main
-```
-
-### 8. Run tests
-
-```powershell
-pytest
-```
-
-At the current scaffold stage, tests are basic sanity checks. Later they should validate real project behavior.
-
-## Project Goal
-
-We want to answer these questions:
-
-- How do deep learning and automata-based models behave on time-series anomaly detection?
-- How stable are they across datasets, seeds, and scenarios?
-- How do they react to noise and unseen symbolic patterns?
-- Can the automata model explain its decisions through transition probabilities?
-
-## Datasets
+## 1. Model Comparisons
 
 ### SKAB
 
-We use only:
+On `SKAB`, looking only at accuracy is misleading. `GRU` achieved the highest accuracy in all three scenarios, but since `precision=0`, `recall=0`, and `f1=0`, it effectively behaves like a majority-class predictor that fails to detect anomalies.
 
-- `valve1`
-- `valve2`
+| Scenario | Best Accuracy | Best F1 | Comment |
+|---|---:|---:|---|
+| Original | GRU `0.6492` | LSTM `0.3892` | The accuracy leader and the real detection leader are different. |
+| Gaussian Noise | GRU `0.6451` | LSTM `0.3823` | LSTM is the most balanced model under noise. |
+| Unseen | GRU `0.6492` | Automata `0.4078` | Automata achieves the best F1 on unseen examples. |
 
-All CSV files inside these folders are concatenated into one combined dataset.
+Main observations for SKAB:
 
-During the merge we add:
-
-- `source_group`: whether the record comes from `valve1` or `valve2`
-- `source_file`: the original CSV filename
-
-Target column:
-
-- `anomaly`
-
-Columns that must not be used as model input:
-
-- `datetime`
-- `changepoint`
-- `source_group`
-- `source_file`
+- `LSTM` is the most balanced overall model under original and noisy conditions.
+- `CNN1D` can produce high recall, but it shows strong instability across folds.
+- `Automata` is weaker than LSTM in the original scenario, but it achieves the best F1 and recall in the unseen scenario.
+- `GRU` is not functionally useful as an anomaly detector beyond its accuracy score.
 
 ### BATADAL
 
-We use only:
+On `BATADAL`, deep learning models, especially `GRU`, appear clearly stronger.
 
-- `Training Dataset 2`
+| Scenario | Best Accuracy | Best F1 | Comment |
+|---|---:|---:|---|
+| Original | GRU `0.9590` | GRU `0.3265` | GRU is the dominant model. |
+| Gaussian Noise | GRU `0.9590` | GRU `0.3265` | It is almost unaffected by noise. |
+| Unseen | GRU `0.8918` | CNN1D `0.1493` | All models degrade under unseen conditions. |
 
-In the current local project this file is:
+Main observations for BATADAL:
 
-- `data/raw/batadal/BATADAL_dataset04.csv`
+- `GRU` leads in both accuracy and F1 for the original and noisy scenarios.
+- `LSTM` gives the highest recall, but its precision is very low.
+- `Automata`, despite being interpretable, is not competitive on BATADAL in terms of F1.
+- `CNN1D` is the F1 leader in the unseen scenario, but the absolute performance level remains low.
 
-Target column:
+## 2. Performance Differences Across Datasets
 
-- `ATT_FLAG`
+The two datasets reward model families in very different ways.
 
-The time column must not be used directly as a model feature. It is used only for:
+- `BATADAL` seems more favorable for deep learning models. In particular, `GRU`, despite its poor behavior on `SKAB`, achieves very high accuracy and the best F1 here.
+- `SKAB` gives more room to the automata approach when unseen symbolic patterns are involved. The `Automata` model achieves the best result in the `SKAB unseen` scenario with `F1=0.4078`.
+- On `BATADAL`, the automata model sometimes improves recall, but its precision remains too low for F1 to become competitive.
+- On `SKAB`, fold-level variance is clearly visible, which suggests a more heterogeneous dataset and more sensitive model behavior.
 
-- keeping chronological order
-- time-based splitting
-- temporal interpretation of results
+In summary:
 
-## High-Level Workflow
+- `BATADAL`: favors deep learning
+- `SKAB unseen`: favors automata
+- `SKAB original/noise`: favors LSTM
 
-This is the order in which the project should be built and executed.
-
-1. Organize raw data in `data/raw/`
-2. Load and validate SKAB and BATADAL files
-3. Build processed datasets in `data/processed/`
-4. Split data correctly without leakage
-5. Apply preprocessing using train-only fitting
-6. Train deep learning models
-7. Build the symbolic automata pipeline
-8. Handle unseen patterns with Levenshtein mapping
-9. Evaluate all models
-10. Generate explainability outputs for the automata model
-11. Save metrics, logs, figures, and JSON outputs
-12. Summarize everything in the final report
-
-## Directory Guide
-
-Below is the intended role of each folder and when it gets populated.
-
-```text
-BlackBox-vs-Automata-TS/
-|
-|-- data/
-|   |-- raw/
-|   |   |-- skab/
-|   |   |   |-- valve1/
-|   |   |   `-- valve2/
-|   |   `-- batadal/
-|   |       `-- BATADAL_dataset04.csv
-|   `-- processed/
-|       |-- skab/
-|       `-- batadal/
-|
-|-- configs/
-|   |-- skab.yaml
-|   `-- batadal.yaml
-|
-|-- src/
-|   |-- data/
-|   |-- features/
-|   |-- models/
-|   |   |-- deep_learning/
-|   |   `-- automata/
-|   |-- explainability/
-|   |-- evaluation/
-|   |-- experiments/
-|   |-- utils/
-|   `-- main.py
-|
-|-- tests/
-|-- outputs/
-|   |-- logs/
-|   |-- metrics/
-|   |-- explainability/
-|   `-- figures/
-|-- notebooks/
-|   `-- eda.ipynb
-|-- requirements.txt
-|-- README.md
-`-- .gitignore
-```
-
-### `data/`
-
-This folder contains all dataset files.
-
-### `data/raw/`
-
-This is where original, untouched source data lives.
-
-What goes here:
-
-- original SKAB CSV files
-- original BATADAL CSV file
-
-When it is filled:
-
-- at the very beginning of the project
-
-Important rule:
-
-- files in `raw/` should stay unchanged
-
-### `data/processed/`
-
-This folder stores datasets after loading, merging, cleaning, splitting, or transformation.
-
-What goes here:
-
-- merged SKAB dataset
-- SKAB fold-specific train/test files
-- BATADAL train/validation/test files
-- optionally normalized or PCA-ready intermediate outputs
-
-When it is filled:
-
-- after dataset loading and preprocessing scripts are run
-
-Typical examples:
-
-- `data/processed/skab/combined.csv`
-- `data/processed/skab/fold_1_train.csv`
-- `data/processed/skab/fold_1_test.csv`
-- `data/processed/batadal/train.csv`
-- `data/processed/batadal/validation.csv`
-- `data/processed/batadal/test.csv`
-
-### `configs/`
-
-This folder contains central configuration files for each dataset.
-
-What goes here:
-
-- dataset paths
-- split strategy
-- preprocessing settings
-- model parameters
-- automata parameters
-- experiment seeds
-
-When it is filled:
-
-- before running experiments
-- updated whenever we change hyperparameters or experiment settings
-
-Why it matters:
-
-- no hard-coded parameters should be scattered inside the codebase
-
-### `src/`
-
-This is the main source code folder.
-
-### `src/data/`
-
-This package handles reading, validating, preparing, and splitting data.
-
-Files:
-
-- `loaders.py`: shared loading helpers and shared path abstractions
-- `skab_loader.py`: reads all SKAB files, concatenates them, adds `source_group` and `source_file`
-- `batadal_loader.py`: reads BATADAL and validates its columns
-- `preprocess.py`: central preprocessing pipeline
-- `scaling.py`: normalization logic; must fit only on train data
-- `pca.py`: PCA logic; must fit only on train data and transform validation/test with the same PCA
-
-When this folder is used:
-
-- immediately after project setup
-- before any training starts
-
-### `src/features/`
-
-This package contains feature engineering and symbolic representation logic.
-
-Files:
-
-- `windowing.py`: sliding window creation
-- `paa.py`: Piecewise Aggregate Approximation
-- `sax.py`: Symbolic Aggregate approXimation
-- `noise.py`: Gaussian noise injection for the noise scenario
-
-When this folder is used:
-
-- during automata pipeline construction
-- during noisy scenario experiments
-
-### `src/models/`
-
-This package contains all model implementations.
-
-### `src/models/deep_learning/`
-
-This folder contains black-box models.
-
-Files:
-
-- `lstm.py`
-- `gru.py`
-- `cnn1d.py`
-
-What they should do:
-
-- receive preprocessed sequences
-- train with fixed experiment settings
-- save predictions for evaluation
-
-When this folder is used:
-
-- after preprocessing and sequence preparation
-
-### `src/models/automata/`
-
-This folder contains the interpretable symbolic model.
-
-Files:
-
-- `automaton.py`: main probabilistic automata class
-- `transitions.py`: transition counts and probabilities
-- `unseen_handler.py`: maps unseen patterns to the nearest known pattern using Levenshtein distance
-
-What this part must support:
-
-- PAA
-- SAX
-- sliding window patterns
-- state extraction
-- transition probability estimation
-- unseen pattern handling
-
-When this folder is used:
-
-- after PCA reduces multivariate data to one dimension
-- during automata training and inference
-
-### `src/explainability/`
-
-This package generates interpretable outputs for the automata model.
-
-Files:
-
-- `probabilistic_explainer.py`: computes path probability and confidence
-- `decision_formatter.py`: formats results into required JSON or table output
-
-What it should produce:
-
-- current state
-- current pattern
-- seen/unseen status
-- mapped pattern for unseen cases
-- transition sequence
-- transition probabilities
-- total path probability
-- final decision
-- confidence score
-
-When this folder is used:
-
-- after automata inference
-- during result export and reporting
-
-### `src/evaluation/`
-
-This package contains evaluation and statistical analysis logic.
-
-Files:
-
-- `metrics.py`: accuracy, precision, recall, F1-score
-- `statistical_tests.py`: Wilcoxon or McNemar tests
-- `validators.py`: split validation and experiment sanity checks
-
-When this folder is used:
-
-- after each experiment run
-- before report generation
-
-### `src/experiments/`
-
-This package orchestrates experiment execution.
-
-Files:
-
-- `runner.py`: top-level experiment loop
-- `skab_experiment.py`: SKAB-specific experiment flow
-- `batadal_experiment.py`: BATADAL-specific experiment flow
-
-What it should control:
-
-- seed loop
-- scenario loop
-- model loop
-- parameter variation loop
-- saving outputs
-
-When this folder is used:
-
-- once loaders, preprocessing, and models are ready
-
-### `src/utils/`
-
-This package contains shared utilities.
-
-Files:
-
-- `config.py`: safe loading of YAML configuration files
-- `logger.py`: logging into `outputs/logs/`
-- `reproducibility.py`: random seed control
-
-When this folder is used:
-
-- across the whole project
-
-### `src/main.py`
-
-This is the project entry point.
-
-What it should eventually do:
-
-- load config
-- choose dataset
-- trigger loading and preprocessing
-- run experiments
-- save results
-
-## `tests/`
-
-This folder contains unit tests and validation tests.
-
-What goes here:
-
-- unseen pattern tests
-- Levenshtein tests
-- transition probability tests
-- data loader tests
-- PAA/SAX tests
-- pipeline sanity tests
-
-When it is filled:
-
-- throughout development
-- especially before final experiments
-
-Most important required test:
-
-- verify that unseen pattern mapping works correctly
-
-## `outputs/`
-
-This folder stores generated experiment outputs. It should not contain hand-written source code.
-
-### `outputs/logs/`
-
-Stores:
-
-- run logs
-- debug information
-- execution traces
-
-Filled when:
-
-- experiments are executed
-
-### `outputs/metrics/`
-
-Stores:
-
-- per-seed results
-- per-fold results
-- aggregated means and standard deviations
-- comparison tables in CSV or JSON
-
-Filled when:
-
-- evaluation is completed
-
-### `outputs/explainability/`
-
-Stores:
-
-- JSON outputs for automata decisions
-- case-by-case explanation files
-
-Filled when:
-
-- explainability module is run
-
-### `outputs/figures/`
-
-Stores:
-
-- confusion matrices
-- PR or ROC curves
-- automata state diagrams
-- transition heatmaps
-- parameter sensitivity plots
-
-Filled when:
-
-- visualization scripts are executed
-
-## `notebooks/`
-
-This folder is for exploratory work only.
-
-What goes here:
-
-- quick EDA
-- plots for inspection
-- temporary analysis
-
-Important rule:
-
-- final project logic should live in `src/`, not only in notebooks
-
-## `requirements.txt`
-
-Lists Python dependencies needed to run the project.
-
-Expected examples:
-
-- `pandas`
-- `numpy`
-- `scikit-learn`
-- `tensorflow`
-- `pytest`
-- `pyyaml`
-
-## `.gitignore`
-
-Specifies which generated files should not be committed.
-
-Usually ignored:
-
-- cache files
-- local virtual environments
-- generated outputs
-- optionally processed data
-
-## Development Order
-
-This is the recommended implementation order for the team.
-
-### Phase 1: Data foundation
-
-1. Finish `skab_loader.py`
-2. Finish `batadal_loader.py`
-3. Save merged and processed raw-ready files into `data/processed/`
-
-### Phase 2: Safe preprocessing
-
-1. Implement split logic
-2. Implement normalization using train-only fit
-3. Implement PCA using train-only fit
-4. Validate that no leakage happens
-
-### Phase 3: Deep learning baseline
-
-1. Prepare sequence windows
-2. Implement at least two deep learning models
-3. Train with fixed seeds and early stopping
-4. Save predictions and metrics
-
-### Phase 4: Automata pipeline
-
-1. Convert data to one dimension with PCA
-2. Apply sliding window
-3. Apply PAA
-4. Apply SAX
-5. Build patterns and states
-6. Estimate transition probabilities
-7. Run anomaly decisions
-
-### Phase 5: Unseen pattern handling
-
-1. Build SAX vocabulary from training data
-2. Detect unseen patterns in test data
-3. Map them using Levenshtein distance
-4. test this behavior in `tests/`
-
-### Phase 6: Explainability
-
-1. Compute transition path probabilities
-2. Assign confidence scores
-3. Export JSON explanation outputs
-
-### Phase 7: Evaluation and reporting
-
-1. Run original scenario
-2. Run Gaussian noise scenario
-3. Run unseen scenario
-4. Run parameter variation experiments
-5. Aggregate results over seeds
-6. Create figures
-7. Write final report in Markdown
-
-## Execution Plan
-
-Once implementation is complete, the expected execution flow should be:
-
-1. Prepare raw data in `data/raw/`
-2. Update `configs/skab.yaml` or `configs/batadal.yaml`
-3. Run the project entry point
-4. Save processed data
-5. Train models
-6. Evaluate outputs
-7. Export logs, metrics, figures, and explainability JSON files
-
-In a mature version of the project, a teammate should be able to run something like:
-
-```bash
-python -m src.main
-```
-
-or later:
-
-```bash
-python -m src.main --dataset skab
-python -m src.main --dataset batadal
-```
-
-## Data Leakage Rules
-
-These rules are mandatory.
-
-- Never do random row-based splitting for time series
-- Fit normalization only on training data
-- Apply the fitted scaler to validation and test
-- Fit PCA only on training data
-- Apply the fitted PCA to validation and test
-- Build the SAX vocabulary only from training data
-- Build automata transition probabilities only from training data
-
-## Experiment Rules
+## 3. Noise Impact Analysis
 
 ### SKAB
 
-- split by file groups
-- use `source_file` as the grouping variable
-- the same file must not appear in both train and test in the same fold
+On `SKAB`, the effect of noise varies by model.
+
+- `LSTM` changes only slightly, from original `F1=0.3892` to noisy `0.3823`.
+- `CNN1D` drops to `F1=0.2666`, showing a more fragile profile.
+- `Automata` improves in accuracy under noise (`0.4512 -> 0.5738`), but its `F1=0.3409 -> 0.2954` decreases. This suggests that the model becomes more conservative and loses recall.
+- `GRU` is already weak, so it does not show a meaningful recovery under noise.
 
 ### BATADAL
 
-- preserve time order
-- split with `60% train / 20% validation / 20% test`
-- do not use random row shuffling
+On `BATADAL`, the effect of noise is much more limited.
 
-### Fixed seeds
+- `GRU` remains almost identical in the original and noisy scenarios.
+- `LSTM` and `CNN1D` also show only small changes.
+- On the automata side, recall increases, but precision remains too low for overall quality to improve much.
 
-- `42`
-- `123`
-- `2026`
-- `7`
-- `999`
+As a result, in terms of noise robustness:
 
-## What Is Already Present
+- Most stable model on `BATADAL`: `GRU`
+- Most stable model on `SKAB`: `LSTM`
 
-The repository already contains:
+## 4. Unseen Data Behavior
 
-- the full directory scaffold
-- initial config files
-- starter code files
-- basic placeholder tests
-- raw dataset files in the correct `data/raw/` structure
+The unseen scenario is one of the most important parts of this project, because it directly tests the Levenshtein-based unseen mapping behavior of the automata approach.
 
-## What Still Needs To Be Implemented
+### SKAB
 
-The current codebase is a scaffold, not the final scientific implementation.
+`SKAB unseen` produces a strong result for automata:
 
-Still needed:
+- `Automata recall = 0.5585`
+- `Automata F1 = 0.4078`
 
-- full preprocessing logic
-- full split logic
-- actual LSTM/GRU/CNN implementations
-- actual PAA/SAX implementation details
-- automata training and inference logic
-- explainability export logic
-- real experiment runner
-- complete visualizations
-- final report content
+These values show that the `Automata` model improves in recall and F1 compared to the original scenario. Even though accuracy drops, the model becomes better at capturing unseen patterns. This is the strongest empirical sign that the unseen-handler design is working.
 
-## Team Handover Summary
+### BATADAL
 
-If a teammate opens this repository for the first time, they should understand the project like this:
+The picture is different for `BATADAL unseen`:
 
-- `data/raw/` contains original source datasets
-- `data/processed/` contains generated train/test-ready data
-- `configs/` defines what experiment to run
-- `src/` contains all code
-- `tests/` verifies critical behavior
-- `outputs/` stores generated results
-- `notebooks/` is only for exploration
-- `README.md` explains the plan, structure, and execution flow
+- `Automata recall = 0.5833`
+- but `precision = 0.0548`, so `F1 = 0.1002`
 
-This repository is organized to support a modular, reproducible, and report-friendly implementation of the course project.
+In other words, the automata model flags unseen examples more often, but a large portion of those flags are false positives. This suggests that interpretability is preserved, but the decision boundary does not adapt well enough to this dataset.
+
+## 5. Parameter Effects
+
+### Parameter sensitivity on SKAB
+
+On `SKAB`, the automata model is highly sensitive to parameter choices.
+
+- Small windows and small alphabets (`w=3, a=3`) produce high accuracy but very low recall and F1.
+- As window size and alphabet size increase, the model becomes more aggressive, recall increases, and accuracy decreases.
+- The strongest automata F1 results appear under larger parameter settings.
+
+Notable examples:
+
+- Highest automata F1 in the original scenario: `w=6, a=6 -> 0.4329`
+- Highest automata F1 in the Gaussian noise scenario: `w=6, a=6 -> 0.3780`
+- Highest automata F1 in the unseen scenario: `w=6, a=6 -> 0.4560`
+
+This reveals an important trade-off:
+
+- small parameters: higher accuracy, lower anomaly sensitivity
+- large parameters: lower accuracy, higher recall, stronger unseen detection
+
+The selected `w=6, a=5` setting can therefore be seen as a middle ground, but in terms of pure automata F1, `w=6, a=6` looks stronger.
+
+### Parameter sensitivity on BATADAL
+
+On `BATADAL`, changing automata parameters does affect behavior, but the absolute performance level remains limited.
+
+- Larger window and alphabet combinations increase recall.
+- However, precision remains very low, so F1 gains are limited.
+- Across the grid, automata F1 mostly stays in the `0.08 - 0.13` range.
+
+This means:
+
+- Parameter tuning does not make the automata model fully competitive on `BATADAL`.
+- Here, parameter tuning changes decision behavior more than it improves final quality.
+
+## 6. Scientific Interpretation
+
+The most important scientific conclusions of this project are:
+
+- Model behavior depends strongly on the dataset; no single model is best everywhere.
+- `Accuracy` alone is not a reliable metric, especially in imbalanced anomaly detection problems.
+- The `SKAB unseen` scenario highlights the strongest use case of the automata approach.
+- On `BATADAL`, deep learning models are clearly more advantageous.
+- Increasing automata parameters improves recall and unseen sensitivity, but this comes at an accuracy cost.
+
+## 7. Required Figures
+
+The figures below were selected as the minimum required visual set for the report. For consistency, the same representative experiment setting is used: `SKAB`, `unseen`, `window_size=6`, `alphabet_size=5`, `fold=1`.
+
+### Confusion Matrix
+
+![Confusion Matrix](outputs/figures/report/skab/unseen/skab_unseen_w6_a5_fold1_confusion_matrix.png)
+
+### Precision-Recall Curve
+
+![Precision-Recall Curve](outputs/figures/report/skab/unseen/skab_unseen_w6_a5_fold1_precision_recall_curve.png)
+
+### Automata State Diagram
+
+![Automata State Diagram](outputs/figures/report/skab/unseen/skab_unseen_w6_a5_fold1_state_diagram.png)
+
+### Transition Probability Heatmap
+
+![Transition Probability Heatmap](outputs/figures/report/skab/unseen/skab_unseen_w6_a5_fold1_transition_heatmap.png)
+
+### Parameter Sensitivity Plot
+
+The figure below shows how the automata model's `F1` in the `unseen` scenario changes with window size and alphabet size.
+
+![Parameter Sensitivity Heatmap](outputs/figures/report/skab/parameter_sensitivity/skab_unseen_automata_f1_heatmap.png)
+
+## 8. Conclusion
+
+This study shows that there is no single universal winner; instead, model behavior changes depending on context.
+
+- `SKAB original/noisy`: the most balanced model is `LSTM`
+- `SKAB unseen`: the most interesting and strongest behavior comes from `Automata`
+- `BATADAL`: the strongest overall model is `GRU`
+- `Automata`: valuable for interpretability and unseen behavior, but sensitive to the dataset
+
+Therefore, the main output of the project is not a ranking, but this insight: interpretable symbolic models and black-box deep learning models offer different advantages under different data conditions, and meaningful comparison requires scenario-based, metric-based, and parameter-based analysis.
