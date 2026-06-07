@@ -83,6 +83,13 @@ class GRUModel:
 
         validation_data = (x_val, y_val) if x_val is not None else None
 
+
+        # BURAYA EKLE:
+        from sklearn.utils.class_weight import compute_class_weight
+        classes = np.unique(y_train)
+        weights = compute_class_weight('balanced', classes=classes, y=y_train)
+        class_weight_dict = dict(zip(classes.tolist(), weights.tolist()))
+
         self.model_.fit(
             x_train,
             y_train,
@@ -90,8 +97,10 @@ class GRUModel:
             batch_size=self.batch_size,
             validation_data=validation_data,
             callbacks=callbacks,
+            class_weight=class_weight_dict,  # EKLE
             verbose=0,
         )
+
         return self
 
     def predict(self, x_test: np.ndarray) -> np.ndarray:
