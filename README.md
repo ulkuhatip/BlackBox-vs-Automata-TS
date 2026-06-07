@@ -3,7 +3,7 @@
 **Software Development - Project 2**  
 **Group 09**  
 **Black-Box vs Explainable Time-Series Analysis**
-
+Ülkü Hakip - Anisa Emin
 ---
 
 ## 1. About the Project
@@ -19,15 +19,6 @@ The main goal is not to identify a single universal winner, but to analyze how d
 - Gaussian noise
 - unseen pattern conditions
 - different automata parameter settings
-
-### Datasets
-
-| Dataset | Source | Data Type | Split Strategy |
-|---------|--------|-----------|----------------|
-| **SKAB** | `valve1` + `valve2` | Industrial sensor time series | Group-based 5-fold split by `source_file` |
-| **BATADAL** | `BATADAL_dataset04.csv` | Water distribution anomaly/attack data | Temporal `60/20/20` split |
-
----
 
 ## 2. Setup
 
@@ -138,17 +129,6 @@ Cross-dataset training/testing experiments were **not executed** in the current 
 | Alphabet Size | 3 | 4 | 5 | 6 |
 |---------------|---|---|---|---|
 | **Unseen F1** | 0.2874 | 0.3719 | 0.4078 | 0.4560 |
-
-### Table 5: Runtime Comparison
-
-Runtime values are **not explicitly logged** in the current saved artifacts.
-
-| Model | Training Time (s) | Inference Time (s) |
-|-------|-------------------|--------------------|
-| LSTM | N/A | N/A |
-| GRU | N/A | N/A |
-| 1D-CNN | N/A | N/A |
-| Automata | N/A | N/A |
 
 ### Summary
 
